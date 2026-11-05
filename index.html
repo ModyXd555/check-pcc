@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>فحص الجهاز</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f5f4;--card:#fff;--ink:#16232b;--mute:#5d6b73;--line:#d9e0e3;--brand:#0f5c63;--on:#fff;--warn:#b4460a;--warnbg:#fdeee3;--ok:#1d7a4a;--err:#a32020}
+@media(prefers-color-scheme:dark){:root{--bg:#10181c;--card:#18242a;--ink:#e8eef0;--mute:#98a7ae;--line:#2a3b43;--brand:#4fb3bb;--on:#08262a;--warn:#f0a070;--warnbg:#3a2415;--ok:#6fd09b;--err:#ff8f8f}}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.7 "IBM Plex Sans Arabic",Tahoma,sans-serif}
+main{max-width:640px;margin:0 auto;padding:32px 16px 60px}
+h1{font-size:28px;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:16px}
+label{display:block;font-weight:500;margin:12px 0 4px}
+input[type=text],input[type=password],input[type=tel]{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus,button:focus-visible{outline:3px solid var(--brand);outline-offset:1px}
+button{font:inherit;font-weight:700;border:0;border-radius:8px;padding:11px 20px;background:var(--brand);color:var(--on);cursor:pointer;margin-top:16px}
+button:disabled{opacity:.5;cursor:not-allowed}
+.consent{background:var(--warnbg);border-radius:8px;padding:12px 16px;font-size:15px;margin-top:16px}
+.consent ul{margin:6px 0 0;padding-inline-start:20px}
+.msg{margin-top:12px;min-height:1.4em}.err{color:var(--err)}.ok{color:var(--ok)}
+.res{margin-top:12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.res div{padding:6px 10px;border-bottom:1px solid var(--line);font-size:14px;direction:ltr;text-align:left;word-break:break-all;background:var(--warnbg);color:var(--warn)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <h1>فحص الجهاز</h1>
+  <p class="sub">أدخل الكود الذي استلمته من المشرف، ثم اختر المجلد الذي تريد فحصه.</p>
+
+  <div class="card">
+    <label for="code">كود الدخول</label>
+    <input id="code" type="password" autocomplete="off">
+    <label for="name">الاسم الكامل</label>
+    <input id="name" type="text" maxlength="60" autocomplete="name">
+    <label for="phone">رقم الهاتف</label>
+    <input id="phone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel">
+
+    <div class="consent">
+      <strong>ما الذي سيُرسل؟</strong>
+      <ul>
+        <li>أسماء الملفات ومساراتها وأحجامها داخل المجلد الذي تختاره أنت فقط.</li>
+        <li>لا يُقرأ محتوى أي ملف ولا يُرفع، ولا يتحكم الموقع بجهازك.</li>
+        <li>يُحفظ التقرير باسمك ورقمك ويطّلع عليه المشرف فقط.</li>
+      </ul>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:500">
+        <input type="checkbox" id="agree"> أوافق على ما سبق
+      </label>
+    </div>
+
+    <button id="pick">اختيار المجلد وبدء الفحص</button>
+    <div class="msg" id="msg" role="status"></div>
+    <div class="res" id="res" hidden></div>
+  </div>
+  <p class="sub" id="nosup" hidden>المتصفح لا يدعم اختيار المجلدات. استخدم Chrome أو Edge على الكمبيوتر.</p>
+</main>
+
+<!-- نموذج مخفي: Netlify يلتقطه ويحفظ كل عملية في لوحة Forms الخاصة بك فقط -->
+<form name="scans" method="POST" data-netlify="true" netlify-honeypot="bot" hidden>
+  <input name="bot"><input name="op_id"><input name="name"><input name="phone">
+  <input name="folder"><input name="total"><input name="flagged"><textarea name="flagged_files"></textarea>
+</form>
+
+<script>
+/* ===== الإعدادات: غيّر الكود من هنا فقط، وأعد رفع الملف ===== */
+const ACCESS_CODE = "CHANGE-ME-1234";
+/* ============================================================ */
+
+const $ = s => document.querySelector(s);
+if (!window.showDirectoryPicker) { $("#nosup").hidden = false; $("#pick").disabled = true; }
+
+const HIGH = /(aimbot|wallhack|triggerbot|spoof|hwid|kdmapper|cheat.?engine|injector|keylog|stealer|executor|norecoil|esp.?hack)/i;
+const MED = /(cheat|hack|bypass|loader|crack|trainer|macro|menu.?mod)/i;
+const DOUBLE = /\.(pdf|jpe?g|png|docx?|txt|mp4|zip)\.(exe|scr|bat|cmd|vbs|js|ps1)$/i;
+const level = n => (HIGH.test(n) || DOUBLE.test(n)) ? 2 : MED.test(n) ? 1 : 0;
+
+async function walk(dir, base, st, depth = 0) {
+  if (depth > 12) return;
+  for await (const e of dir.values()) {
+    if (st.total >= 50000) return;
+    const path = base + "/" + e.name;
+    if (e.kind === "directory") { await walk(e, path, st, depth + 1); continue; }
+    st.total++;
+    const lv = level(e.name);
+    if (lv) st.hits.push({ path, lv });
+    if (st.total % 200 === 0) $("#msg").textContent = "جارٍ الفحص… " + st.total + " ملف";
+  }
+}
+
+$("#pick").onclick = async () => {
+  const msg = $("#msg"); msg.className = "msg"; $("#res").hidden = true;
+  const code = $("#code").value.trim(), name = $("#name").value.trim(), phone = $("#phone").value.trim();
+  if (code !== ACCESS_CODE) { msg.className = "msg err"; msg.textContent = "الكود غير صحيح."; return; }
+  if (name.length < 2 || phone.replace(/\D/g, "").length < 6) { msg.className = "msg err"; msg.textContent = "أكمل الاسم والرقم."; return; }
+  if (!$("#agree").checked) { msg.className = "msg err"; msg.textContent = "وافق على الشروط للمتابعة."; return; }
+
+  let dir; try { dir = await showDirectoryPicker({ mode: "read" }); } catch { return; }
+  $("#pick").disabled = true;
+  try {
+    const st = { total: 0, hits: [] };
+    await walk(dir, dir.name, st);
+    st.hits.sort((a, b) => b.lv - a.lv);
+
+    const opId = new Date().toISOString().slice(2, 10).replace(/-/g, "") + "-" + Math.floor(1000 + Math.random() * 9000);
+    const lines = st.hits.slice(0, 150).map(h => (h.lv === 2 ? "[عالي] " : "[متوسط] ") + h.path);
+    const body = new URLSearchParams({
+      "form-name": "scans", op_id: opId, name, phone, folder: dir.name,
+      total: st.total, flagged: st.hits.length, flagged_files: lines.join("\n").slice(0, 20000)
+    });
+    msg.textContent = "جارٍ إرسال التقرير…";
+    const r = await fetch("/", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+    if (!r.ok) throw new Error("تعذّر الإرسال، حاول مرة أخرى.");
+
+    msg.className = "msg ok";
+    msg.textContent = `تم الفحص. رقم العملية ${opId}. عدد الملفات ${st.total}، المشبوه ${st.hits.length}.`;
+    if (lines.length) {
+      const box = $("#res"); box.textContent = ""; box.hidden = false;
+      lines.forEach(l => { const d = document.createElement("div"); d.textContent = l; box.append(d); });
+    }
+  } catch (e) { msg.className = "msg err"; msg.textContent = e.message; }
+  $("#pick").disabled = false;
+};
+</script>
+</body>
+</html>
